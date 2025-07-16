@@ -10,5 +10,6 @@ class Places extends Model
     protected $casts = [
         'emails' => 'array',
         'social_links' => 'array',
+        'types' => 'array'
     ];
 }

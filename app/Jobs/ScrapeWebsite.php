@@ -15,13 +15,15 @@ class ScrapeWebsite implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $website, $name, $address;
+    public $website, $name, $address, $types;
+    public $tries = 2;
 
-    public function __construct($website, $name, $address)
+    public function __construct($website, $name, $address, $types)
     {
         $this->website = $website;
         $this->name = $name;
         $this->address = $address;
+        $this->types = $types;
     }
 
     public function handle(): void
@@ -31,17 +33,10 @@ class ScrapeWebsite implements ShouldQueue
                 return;
             }
             
-            $res = Http::timeout(120)
-                ->accept('text/html')
-                ->withHeaders([
-                    'Accept-Encoding' => 'gzip, deflate',
-                    'Connection' => 'keep-alive',
-                    'User-Agent' => 'Mozilla/5.0 (compatible; LaravelScraper/1.0)',
-                ])
-                ->get('http://api.scraperapi.com', [
+            $res = Http::timeout(40)->get('https://app.scrapingbee.com/api/v1', [
                     'api_key' => env('SCRAPER_API_KEY'),
                     'url' => $this->website,
-                    'render' => 'true',
+                    'render_js' => 'true'
                 ]);
 
             if (!$res->successful()) return;
@@ -57,7 +52,7 @@ class ScrapeWebsite implements ShouldQueue
                 $href = $node->attr('href');
                 $text = strtolower($node->text());
 
-                if ($href && (str_contains($href, 'contact') || str_contains($href, 'iletisim') || str_contains($text, 'contact') || str_contains($text, 'iletişim') || str_contains($text, 'neredeyiz'))) {
+                if ($href && (str_contains($href, 'contact') || str_contains($href, 'iletisim') || str_contains($text, 'contact') || str_contains($text, 'iletişim') || str_contains($text, 'neredeyiz') || str_contains($href, 'neredeyiz') || str_contains($text, 'bize-ulasin') || str_contains($href, 'bize-ulasin') || str_contains($text, 'bize-ulaşın') || str_contains($href, 'bize-ulaşın') || str_contains($text, 'contacts') || str_contains($href, 'contacts'))) {
                     $contactPages[] = $href;
                 }
             });
@@ -67,17 +62,10 @@ class ScrapeWebsite implements ShouldQueue
             }, array_unique($contactPages));
             
             foreach ($contactPages as $url) {
-                $html2 = Http::timeout(120)
-                    ->accept('text/html')
-                    ->withHeaders([
-                        'Accept-Encoding' => 'gzip, deflate',
-                        'Connection' => 'keep-alive',
-                        'User-Agent' => 'Mozilla/5.0 (compatible; LaravelScraper/1.0)',
-                    ])
-                    ->get('http://api.scraperapi.com', [
+                $html2 = Http::timeout(20)->get('https://app.scrapingbee.com/api/v1', [
                         'api_key' => env('SCRAPER_API_KEY'),
                         'url' => $url,
-                        'render' => 'true',
+                        'render_js' => 'true'
                     ])->body();
 
                 $cleanHtml = str_replace(
@@ -87,13 +75,15 @@ class ScrapeWebsite implements ShouldQueue
                 );
 
                 preg_match_all('/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i', $cleanHtml, $matches);
-                $emails = array_merge($emails, $matches[0]);
+                if (!empty($matches[0])) {
+                    $emails = array_merge($emails, $matches[0]);
+                }
 
                 $sub = new Crawler($html2);
                 $sub->filter('a')->each(function ($node) use (&$emails, &$socialLinks) {
                     $href = $node->attr('href');
                     if ($href) {
-                        if (str_starts_with($href, 'mailto:')) {
+                        if ($href !== null && stripos($href, 'mailto:') !== false) {
                             $emails[] = substr($href, 7);
                         }
 
@@ -104,18 +94,24 @@ class ScrapeWebsite implements ShouldQueue
                 });
             }
             
-            Places::create([
+            $create = Places::create([
                 'name' => $this->name,
                 'address' => $this->address,
                 'website' => $this->website,
                 'emails' => array_unique(array_filter($emails)),
                 'social_links' => array_unique($socialLinks),
+                'types' => $this->types
             ]);
             
+            if($create){
+                logger()->error("Scraped for {$this->website}: ");
+            }else{
+                logger()->error("Not Scraped for {$this->website}: ");
+            }
+
             Cache::put('scraped:' . md5($this->website), true, now()->addDay());
         } catch (\Throwable $e) {
             logger()->error("Scrape failed for {$this->website}: " . $e->getMessage());
         }
     }
-
 }

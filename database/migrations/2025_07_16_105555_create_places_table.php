@@ -12,12 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('places', function (Blueprint $table) {
-             $table->id();
+            $table->id();
             $table->string('name');
             $table->string('address')->nullable();
             $table->string('website')->nullable();
             $table->json('emails')->nullable();
             $table->json('social_links')->nullable();
+            $table->json('types')->nullable();
             $table->timestamps();
         });
     }
