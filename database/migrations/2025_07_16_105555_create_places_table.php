@@ -19,6 +19,12 @@ return new class extends Migration
             $table->json('emails')->nullable();
             $table->json('social_links')->nullable();
             $table->json('types')->nullable();
+            $table->json('opening_hours')->nullable();
+            $table->string('lat')->nullable();
+            $table->string('lng')->nullable();
+            $table->string('rating')->nullable();
+            $table->string('business_status')->nullable();
+            $table->enum('status', ['0', '1', '2'])->default('2');
             $table->timestamps();
         });
     }

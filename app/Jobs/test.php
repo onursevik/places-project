@@ -39,10 +39,18 @@ class ScrapeWebsite implements ShouldQueue
                 return;
             }
 
-            $res = Http::timeout(40)->get('https://api.zenrows.com/v1/', [
-                'apikey' => env('ZENROWS_API_KEY'),
+            $res = Http::timeout(60)->withHeaders([
+                'Authorization' => 'Bearer ' . env('ZENROWS_API_KEY'),
+            ])->get('https://api.zenrows.com/v1/', [
                 'url' => $this->website,
                 'js_render' => 'true',
+                'premium_proxy' => 'true',
+                'antibot' => 'true',
+                'retry' => 'true',
+                'block_resources' => 'true',
+                'custom_headers' => json_encode([
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+                ])
             ]);
 
             if (!$res->successful()) return;
@@ -68,10 +76,18 @@ class ScrapeWebsite implements ShouldQueue
             }, array_unique($contactPages));
 
             foreach ($contactPages as $url) {
-                $html2 = Http::timeout(40)->get('https://api.zenrows.com/v1/', [
-                    'apikey' => env('ZENROWS_API_KEY'),
+                $html2 =  Http::timeout(60)->withHeaders([
+                    'Authorization' => 'Bearer ' . env('ZENROWS_API_KEY'),
+                ])->get('https://api.zenrows.com/v1/', [
                     'url' => $url,
                     'js_render' => 'true',
+                    'premium_proxy' => 'true',
+                    'antibot' => 'true',
+                    'retry' => 'true',
+                    'block_resources' => 'true',
+                    'custom_headers' => json_encode([
+                        'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+                    ]),
                 ]);
 
                 $cleanHtml = str_replace(
@@ -88,13 +104,12 @@ class ScrapeWebsite implements ShouldQueue
                 $sub = new Crawler($html2);
                 $sub->filter('a')->each(function ($node) use (&$emails, &$socialLinks) {
                     $href = $node->attr('href');
-
                     if ($href) {
                         if ($href !== null && stripos($href, 'mailto:') !== false) {
                             $emails[] = substr($href, 7);
                         }
 
-                        if (preg_match('/(facebook|instagram|twitter|linkedin|youtube)\.com/', $href)) {
+                        if (preg_match('/(facebook|instagram|twitter|linkedin)\.com/', $href)) {
                             $socialLinks[] = $href;
                         }
                     }
